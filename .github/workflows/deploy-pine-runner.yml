@@ -1,0 +1,124 @@
+name: Deploy Pine Runner
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never cancel a deploy mid-flight: a run cancelled during the docker
+# stop/rm/run window can leave the "pine-runner" container stuck mid-removal,
+# which blocks later deploys. Queue runs instead.
+concurrency:
+  group: deploy-pine-runner
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Typecheck
+        run: bun run typecheck
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        env:
+          VM_HOST: ${{ secrets.PINE_VM_HOST }}
+          VM_PORT: ${{ secrets.PINE_VM_PORT }}
+          VM_SSH_PRIVATE_KEY: ${{ secrets.PINE_VM_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VM_HOST:-}" ]; then
+            echo "PINE_VM_HOST secret is missing."
+            exit 1
+          fi
+          if [ -z "${VM_SSH_PRIVATE_KEY:-}" ]; then
+            echo "PINE_VM_SSH_PRIVATE_KEY secret is missing."
+            exit 1
+          fi
+
+          SSH_PORT="${VM_PORT:-22}"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VM_SSH_PRIVATE_KEY" > ~/.ssh/pine_deploy_key
+          chmod 600 ~/.ssh/pine_deploy_key
+
+          if ! ssh-keyscan -T 10 -p "$SSH_PORT" -H "$VM_HOST" >> ~/.ssh/known_hosts; then
+            echo "Could not reach SSH on $VM_HOST:$SSH_PORT. Check the VM firewall and external SSH access."
+            exit 1
+          fi
+
+      - name: Deploy on VM
+        env:
+          VM_HOST: ${{ secrets.PINE_VM_HOST }}
+          VM_USER: ${{ secrets.PINE_VM_USER }}
+          VM_PORT: ${{ secrets.PINE_VM_PORT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VM_USER:-}" ]; then
+            echo "PINE_VM_USER secret is missing."
+            exit 1
+          fi
+
+          SSH_PORT="${VM_PORT:-22}"
+          ssh -i ~/.ssh/pine_deploy_key -p "$SSH_PORT" "$VM_USER@$VM_HOST" 'bash -s' <<'EOF'
+          set -euo pipefail
+
+          cd ~/apps/pine_runner
+          git fetch origin main
+          git reset --hard origin/main
+
+          docker build -t pine-runner .
+
+          # Tear down the old container and WAIT until the name is free.
+          # docker rm returns before removal finishes, and a prior cancelled
+          # deploy can leave it stuck mid-removal, so force it and poll until
+          # "pine-runner" is truly gone before reusing the name.
+          docker stop pine-runner 2>/dev/null || true
+          docker rm -f pine-runner 2>/dev/null || true
+          for i in $(seq 1 30); do
+            if [ -z "$(docker ps -aq --filter 'name=^pine-runner$')" ]; then
+              break
+            fi
+            docker rm -f pine-runner 2>/dev/null || true
+            sleep 2
+          done
+          if [ -n "$(docker ps -aq --filter 'name=^pine-runner$')" ]; then
+            echo "Container 'pine-runner' still present after teardown; aborting."
+            docker ps -a --filter name=pine-runner
+            exit 1
+          fi
+
+          docker run -d \
+            --name pine-runner \
+            --restart unless-stopped \
+            --env-file .env \
+            -p 127.0.0.1:8088:8088 \
+            --memory=512m \
+            --cpus=0.5 \
+            --security-opt no-new-privileges \
+            pine-runner
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8088/healthz; then
+              docker image prune -f
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker ps -a --filter name=pine-runner
+          docker logs --tail 200 pine-runner
+          exit 1
+          EOF

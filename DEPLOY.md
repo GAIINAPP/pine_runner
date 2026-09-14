@@ -25,19 +25,33 @@ git add -A && git commit -m "..." && git push
 
 Copy the folder to the VM (or `git clone` it there), then:
 
+First create `~/apps/pine_runner/.env` (the CI workflow and the manual run both
+read it via `--env-file`):
+
 ```bash
-cd pine_runner
+cat > .env <<'ENV'
+PORT=8088
+SAMWISE_INTERNAL_SECRET=<same secret the frontend/tools use>
+SOURCE_URL=https://github.com/GAIINAPP/pine_runner
+ENV
+```
+
+Then build + run:
+
+```bash
+cd ~/apps/pine_runner
 docker build -t pine-runner .
 
 docker run -d --name pine-runner --restart unless-stopped \
+  --env-file .env \
   -p 127.0.0.1:8088:8088 \
-  -e PORT=8088 \
-  -e SAMWISE_INTERNAL_SECRET="<same secret the frontend/tools use>" \
-  -e SOURCE_URL="https://github.com/GAIINAPP/pine_runner" \
-  --memory=512m --cpus=1 \
+  --memory=512m --cpus=0.5 \
   --security-opt no-new-privileges \
   pine-runner
 ```
+
+After the first manual bring-up, later pushes to `main` redeploy automatically
+(see section 6).
 
 Hardening (recommended): the service never needs the internet (candles are
 passed in every request), so cut its egress, e.g. run it on an internal-only
@@ -96,10 +110,31 @@ curl -s http://<VM_HOST>/pine/run \
 
 Expect `{"ok":true,"overlay":true,"plots":[...],"warnings":[...]}`.
 
-## Updating
+## 6. Auto-deploy (GitHub Actions)
+
+`.github/workflows/deploy-pine-runner.yml` typechecks, then SSHes to the VM,
+rebuilds, and restarts the container on every push to `main` (and via manual
+"Run workflow"). It reuses `~/apps/pine_runner` and the `.env` created in
+section 2, so do the manual bring-up once first.
+
+Add these repo secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+| --- | --- |
+| `PINE_VM_HOST` | the VM host/IP (same as the other tool deploys) |
+| `PINE_VM_USER` | the SSH user (`lucifer`) |
+| `PINE_VM_PORT` | SSH port (optional, defaults to 22) |
+| `PINE_VM_SSH_PRIVATE_KEY` | a private key whose public half is in the VM's `~/.ssh/authorized_keys` |
+
+The workflow health-checks `http://127.0.0.1:8088/healthz` after restart and
+fails loudly (dumping `docker logs`) if the container doesn't come up.
+
+## Manual update (fallback)
 
 ```bash
-git pull && docker build -t pine-runner . \
+cd ~/apps/pine_runner && git pull && docker build -t pine-runner . \
   && docker rm -f pine-runner \
-  && docker run -d --name pine-runner ...   # same flags as above
+  && docker run -d --name pine-runner --restart unless-stopped --env-file .env \
+     -p 127.0.0.1:8088:8088 --memory=512m --cpus=0.5 \
+     --security-opt no-new-privileges pine-runner
 ```
