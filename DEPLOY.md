@@ -30,8 +30,8 @@ cd pine_runner
 docker build -t pine-runner .
 
 docker run -d --name pine-runner --restart unless-stopped \
-  -p 127.0.0.1:8085:8085 \
-  -e PORT=8085 \
+  -p 127.0.0.1:8088:8088 \
+  -e PORT=8088 \
   -e SAMWISE_INTERNAL_SECRET="<same secret the frontend/tools use>" \
   -e SOURCE_URL="https://github.com/GAIINAPP/pine_runner" \
   --memory=512m --cpus=1 \
@@ -54,7 +54,7 @@ prefix so the service sees `/run`, `/healthz`, `/source`:
 
 ```nginx
 location /pine/ {
-    proxy_pass http://127.0.0.1:8085/;
+    proxy_pass http://127.0.0.1:8088/;
     proxy_set_header Host $host;
     proxy_read_timeout 30s;
 }
@@ -84,7 +84,7 @@ container. Until `PINE_RUNNER_URL` is set the UI shows a graceful
 
 ```bash
 # on the VM
-curl -s http://127.0.0.1:8085/healthz
+curl -s http://127.0.0.1:8088/healthz
 # through nginx
 curl -s http://<VM_HOST>/pine/healthz
 # a real run (needs the secret if set)

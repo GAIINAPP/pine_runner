@@ -3,7 +3,7 @@ FROM oven/bun:1.3.11
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=8085
+ENV PORT=8088
 
 # pinets is pure JS (acorn/astring) — no native build deps needed.
 COPY package.json bun.lock ./
@@ -15,6 +15,6 @@ COPY tsconfig.json ./tsconfig.json
 # Run unprivileged (the base image ships a `bun` user).
 USER bun
 
-EXPOSE 8085
+EXPOSE 8088
 
 CMD ["bun", "run", "src/service/index.ts"]

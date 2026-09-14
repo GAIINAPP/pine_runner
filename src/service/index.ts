@@ -10,7 +10,7 @@ import { timingSafeEqual } from "node:crypto";
 import { runPine, type InputCandle } from "../pine.ts";
 
 const SERVICE_NAME = "pine-runner";
-const DEFAULT_PORT = 8085;
+const DEFAULT_PORT = 8088;
 const SOURCE_URL =
   process.env.SOURCE_URL?.trim() || "https://github.com/GAIINAPP/pine_runner";
 
