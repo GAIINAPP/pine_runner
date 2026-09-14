@@ -1,0 +1,20 @@
+{
+  "name": "pine-runner",
+  "version": "0.1.0",
+  "description": "Standalone HTTP service that executes Pine Script over supplied OHLCV candles and returns the plotted series. Wraps PineTS (AGPL-3.0).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/service/index.ts",
+    "dev": "bun --watch run src/service/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pinets": "^0.9.33"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}
