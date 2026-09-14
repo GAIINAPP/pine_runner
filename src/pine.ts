@@ -17,6 +17,9 @@ export interface PlotPoint {
   /** UNIX SECONDS (lightweight-charts UTCTimestamp). */
   time: number;
   value: number;
+  /** Per-bar colour when the plot's `color=` varies (e.g. SuperTrend); null
+   *  when the bar carried no colour. The UI segments the line by this. */
+  color?: string | null;
 }
 
 export interface PlotSeries {
@@ -114,19 +117,22 @@ export async function runPine(
     if (raw.length === 0) continue;
 
     let color: string | null = null;
-    const byTime = new Map<number, number>();
+    const byTime = new Map<number, { value: number; color: string | null }>();
     for (const pt of raw) {
-      if (color == null && typeof pt?.options?.color === "string") color = pt.options.color;
+      const c = typeof pt?.options?.color === "string" ? pt.options.color : null;
+      if (color == null && c) color = c;
       const tMs = typeof pt?.time === "number" ? pt.time : null;
       const v = typeof pt?.value === "number" ? pt.value : null;
       if (tMs == null || v == null || !Number.isFinite(v)) continue;
-      byTime.set(Math.floor(tMs / 1000), v); // last write wins per bar
+      byTime.set(Math.floor(tMs / 1000), { value: v, color: c }); // last write wins per bar
     }
     if (byTime.size === 0) continue;
 
-    const data = Array.from(byTime, ([time, value]) => ({ time, value })).sort(
-      (a, b) => a.time - b.time,
-    );
+    const data = Array.from(byTime, ([time, o]) => ({
+      time,
+      value: o.value,
+      color: o.color,
+    })).sort((a, b) => a.time - b.time);
     plots.push({ name, color, data });
   }
 
