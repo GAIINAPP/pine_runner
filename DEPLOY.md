@@ -7,21 +7,19 @@ nginx path, and the frontend reaches it through the `/api/pine/run` proxy.
 `<VM_HOST>` below is the same host used by `BACKEND_URL` in
 `gaiin-frontend/apphosting.yaml`.
 
-## 1. Create the repo (private)
+## 1. Repo
 
-The service is AGPL-3.0 (it links PineTS). It holds no proprietary logic.
+Already created and public: **https://github.com/GAIINAPP/pine_runner**
+(AGPL-3.0, holds no proprietary logic). Public visibility satisfies AGPL §13:
+network users can reach the source, which the service also advertises via
+`GET /source` and the `X-Source-Repository` header.
+
+To push later updates:
 
 ```bash
 cd services/pine_runner
-git init && git add -A && git commit -m "feat: pine-runner service (wraps PineTS)"
-gh repo create GAIINAPP/pine_runner --private --source=. --remote=origin --push
+git add -A && git commit -m "..." && git push
 ```
-
-> AGPL note: because the repo is private, your app's users can't fetch the
-> source from it. Before this feature is user-facing in production, add an
-> in-app link to the source (the service already serves `GET /source` and the
-> `X-Source-Repository` header). Making the repo public later is the simplest
-> way to satisfy AGPL §13.
 
 ## 2. Build + run on the VM
 
